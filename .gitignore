@@ -1,0 +1,22 @@
+# Ignore Python virtual environment directories
+.env
+bin/
+lib/
+lib64/
+pyvenv.cfg
+share/
+
+# Ignore the project-specific directory inside the project (this was created because we setup the env with the same name)
+/discord_member_roles_fetcher/
+
+# Other common ignores
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
