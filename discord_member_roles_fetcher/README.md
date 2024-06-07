@@ -4,9 +4,13 @@ Sure, here is the revised README focusing on setting up the project and adding n
 
 This project collects and extracts the number of members for each role in a Discord server and stores this data in Google BigQuery. The script runs daily to track the historical number of roles such as student groups, leaders, and specific tech interests.
 
+To setup the VM and set set the enviroment easy to work through vscode ssh remote check #setup-gcp-vm.md
+
 ## Prerequisites
 
 1. **Python 3.8 or later**
+2. python3-venv
+
 2. **Discord.py library**
 3. **Pandas library**
 4. **Google Cloud BigQuery client library**
@@ -14,6 +18,12 @@ This project collects and extracts the number of members for each role in a Disc
 6. **dotenv library**
 
 ## Setup
+
+1. Criar um ambiente virtual:
+`python3 -m venv discord_member_roles_fetcher`
+
+Ativar o ambiente virtual:
+`source discord_member_roles_fetcher/bin/activate`
 
 1. **Install dependencies**:
    ```sh
