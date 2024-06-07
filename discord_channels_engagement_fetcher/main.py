@@ -11,7 +11,6 @@ load_dotenv()
 from google.cloud import bigquery
 
 project_id = "web3dev-discord"
-service_account_path="/Users/nomadbitcoin/Projects/web3-community-insights/update_bigquery_database/web3dev-discord.json"
 
 def get_latest_date_from_bigquery():
     print("Getting last data point from BigQuery...")
@@ -34,7 +33,7 @@ def get_latest_date_from_bigquery():
     # Extrai a data mais recente do resultado
     for row in results:
         latest_date = row.latest_date
-        print(f"A data mais recente é: {latest_date}")
+        print(f"the most recent date is: {latest_date}")
         return latest_date
     
 def fetch_data(start_date: str):

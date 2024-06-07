@@ -88,6 +88,10 @@ gcloud iam service-accounts create data-fetcher \
 
 gcloud projects add-iam-policy-binding web3dev-scrapers \
     --member="serviceAccount:data-fetcher@web3dev-scrapers.iam.gserviceaccount.com" \
+    --role="roles/bigquery.jobUser"
+
+gcloud projects add-iam-policy-binding web3dev-scrapers \
+    --member="serviceAccount:data-fetcher@web3dev-scrapers.iam.gserviceaccount.com" \
     --role="roles/bigquery.dataEditor"
 
 gcloud projects add-iam-policy-binding web3dev-scrapers \
