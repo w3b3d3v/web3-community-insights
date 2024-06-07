@@ -1,0 +1,1 @@
+pip install requests pandas google-cloud-bigquery dotenv
