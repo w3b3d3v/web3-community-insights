@@ -3,20 +3,22 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 
+# Load environment variables
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 GITHUB_API_URL = 'https://api.github.com/graphql'
 
+# Set headers for the request
 headers = {
     'Authorization': f'bearer {GITHUB_TOKEN}',
     'Content-Type': 'application/json'
 }
 
-# Consulta GraphQL atualizada
+# GraphQL query
 query = """
-{
-  user(login: "Mitish98") {
+query {
+  organization(login: "w3b3d3v") {
     repositories(first: 100) {
       nodes {
         name
@@ -77,13 +79,13 @@ def process_data(data):
     if not data or 'data' not in data or not data['data']:
         raise ValueError("Unexpected data structure: {}".format(data))
     
-    user_data = data['data'].get('user', {})
+    organization_data = data['data'].get('organization', {})
     
-    # Check if 'user' data is present
-    if not user_data:
-        raise ValueError("User data not found in the response: {}".format(data))
+    # Check if 'organization' data is present
+    if not organization_data:
+        raise ValueError("Organization data not found in the response: {}".format(data))
     
-    repositories = user_data.get('repositories', {}).get('nodes', [])
+    repositories = organization_data.get('repositories', {}).get('nodes', [])
 
     repo_contributions = {}
 
@@ -148,7 +150,7 @@ def process_data(data):
                 else:
                     print(f"Missing commit_node data in edge: {edge}")
         else:
-            print(f"Missing history data in repo: {repo}")
+            print(f"Missing history data in repo: {repo_name}")
 
     # Creating DataFrames
     repo_data = []
@@ -175,12 +177,10 @@ def process_data(data):
 
     return df_repos, df_user_contribs
 
-
-
-# Coletar e processar os dados
+# Fetch and process the data
 data = fetch_data()
 df_repos, df_user_contribs = process_data(data)
 
-# Exibir ou salvar os dataframes conforme necessário
+# Display or save the dataframes as needed
 print(df_repos.head())
 print(df_user_contribs.head())
