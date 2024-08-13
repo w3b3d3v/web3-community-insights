@@ -150,7 +150,7 @@ six==1.16.0
 sos==4.5.6
 ssh-import-id==5.10
 systemd-python==234
-Twisted==18.9.0
+Twisted==24.7.0
 tzdata==2024.1
 ubuntu-pro-client==8001
 ufw==0.36
