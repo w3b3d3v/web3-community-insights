@@ -3,8 +3,8 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 import time
+import sqlite3
 
-# Carregar variáveis de ambiente
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -14,6 +14,8 @@ headers = {
     'Authorization': f'bearer {GITHUB_TOKEN}',
     'Content-Type': 'application/json'
 }
+
+db_path = os.getenv('DB_PATH', 'github_insights/process_datas/github_data.db')
 
 def fetch_data(query, retries=3, delay=5):
     """Função para buscar dados da API do GitHub com repetição em caso de erro."""
@@ -25,7 +27,6 @@ def fetch_data(query, retries=3, delay=5):
             print(f"Attempt {attempt + 1} failed with status {response.status_code}. Retrying in {delay} seconds...")
             time.sleep(delay)
     
-    # Se todas as tentativas falharem, levanta um erro
     raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
 def process_data(data):
@@ -101,7 +102,7 @@ def get_repositories_with_pagination():
     while has_next_page:
         paginated_query = query
         if end_cursor:
-            paginated_query = paginated_query.replace('repositories(first: 50)', f'repositories(first: 50, after: "{end_cursor}")')
+            paginated_query = paginated_query.replace('repositories(first: 100)', f'repositories(first: 100, after: "{end_cursor}")')
         
         data = fetch_data(paginated_query)
         organization_data = data['data'].get('organization', {})
@@ -136,14 +137,67 @@ def get_repositories_with_pagination():
 
     return df_repo_forks, df_users_forks
 
-# Executa a coleta e processamento dos dados
-df_repo_forks, df_users_forks = get_repositories_with_pagination()
+def create_tables():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-# Configurações para exibir todos os dados
-pd.set_option('display.max_rows', None)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Forks_from_repo (
+        repo_name TEXT PRIMARY KEY,
+        forks_count INTEGER
+    )
+    ''')
 
-print("Forks por repositórios:")
-print(df_repo_forks)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Forks_from_user (
+        user TEXT PRIMARY KEY,
+        forks_count INTEGER
+    )
+    ''')
 
-print("\nForks por usuário:")
-print(df_users_forks)
+    conn.close()
+
+def store_data(df_repo_forks, df_users_forks):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    with conn:
+        for _, row in df_repo_forks.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Forks_from_repo (repo_name, forks_count)
+            VALUES (?, ?)
+            ''', (row['repo_name'], row['forks_count']))
+
+        for _, row in df_users_forks.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Forks_from_user (user, forks_count)
+            VALUES (?, ?)
+            ''', (row['user'], row['forks_count']))
+
+    conn.close()
+
+def main():
+    df_repo_forks, df_users_forks = get_repositories_with_pagination()
+
+    create_tables()
+
+    store_data(df_repo_forks, df_users_forks)
+
+    pd.set_option('display.max_rows', None)
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Forks_from_repo')
+    repos = cursor.fetchall()
+
+
+
+    cursor.execute('SELECT * FROM Forks_from_user')
+    users = cursor.fetchall()
+
+
+
+    conn.close()
+
+if __name__ == "__main__":
+    main()

@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 from dotenv import load_dotenv
 import os
+import sqlite3
 
 load_dotenv()
 
@@ -13,7 +14,10 @@ headers = {
     'Content-Type': 'application/json'
 }
 
+db_path = os.getenv('DB_PATH', 'github_insights/process_datas/github_data.db')
+
 def fetch_data(query):
+    """Função para buscar dados da API do GitHub."""
     response = requests.post(GITHUB_API_URL, json={'query': query}, headers=headers)
     if response.status_code == 200:
         return response.json()
@@ -21,6 +25,7 @@ def fetch_data(query):
         raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
 def process_data(data):
+    """Função para processar os dados obtidos da API."""
     if not data or 'data' not in data or not data['data']:
         raise ValueError("Unexpected data structure: {}".format(data))
     
@@ -59,6 +64,7 @@ def process_data(data):
     return df_repo_stars, df_users_stars
 
 def get_repositories_with_pagination():
+    """Função para obter dados de repositórios com paginação e coleta de estrelas."""
     query = """
     {
       organization(login: "w3b3d3v") {
@@ -124,13 +130,66 @@ def get_repositories_with_pagination():
 
     return df_repo_stars, df_users_stars
 
-df_repo_stars, df_users_stars = get_repositories_with_pagination()
+def create_tables():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-pd.set_option('display.max_rows', None)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Stars_from_repo (
+        repo_name TEXT PRIMARY KEY,
+        stars_count INTEGER
+    )
+    ''')
 
-print("Estrelas por repositórios:")
-print(df_repo_stars)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Stars_from_user (
+        user TEXT PRIMARY KEY,
+        repositories_stared_count INTEGER
+    )
+    ''')
 
-print("\nUsuários e quantidade de repositórios que deram estrelas:")
-print(df_users_stars)
+    conn.close()
 
+def store_data(df_repo_stars, df_users_stars):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    with conn:
+        for _, row in df_repo_stars.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Stars_from_repo (repo_name, stars_count)
+            VALUES (?, ?)
+            ''', (row['repo_name'], row['stars_count']))
+
+        for _, row in df_users_stars.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Stars_from_user (user, repositories_stared_count)
+            VALUES (?, ?)
+            ''', (row['user'], row['repositories_stared_count']))
+
+    conn.close()
+    return store_data
+
+def main():
+    df_repo_stars, df_users_stars = get_repositories_with_pagination()
+
+    create_tables()
+
+    store_data(df_repo_stars, df_users_stars)
+
+    pd.set_option('display.max_rows', None)
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Stars_from_repo')
+    repos = cursor.fetchall()
+
+
+    cursor.execute('SELECT * FROM Stars_from_user')
+    users = cursor.fetchall()
+
+
+    conn.close()
+
+if __name__ == "__main__":
+    main()

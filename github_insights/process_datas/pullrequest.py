@@ -1,9 +1,8 @@
-# Process pull requests datas from web3dev repositories
-
 import requests
 import pandas as pd
 from dotenv import load_dotenv
 import os
+import sqlite3
 
 load_dotenv()
 
@@ -14,6 +13,25 @@ headers = {
     'Authorization': f'bearer {GITHUB_TOKEN}',
     'Content-Type': 'application/json'
 }
+
+db_path = os.getenv('DB_PATH', 'github_insights/process_datas/github_data.db')
+
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS PR_from_repo (
+    repo_name TEXT PRIMARY KEY,
+    merged_pull_requests_count INTEGER
+)
+''')
+
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS PR_from_user (
+    user TEXT PRIMARY KEY,
+    merged_pull_requests_count INTEGER
+)
+''')
 
 def fetch_data(query):
     response = requests.post(GITHUB_API_URL, json={'query': query}, headers=headers)
@@ -131,17 +149,32 @@ def get_repositories_with_pagination():
 
     return df_repo_pr_merged, df_users_pr_merged
 
+def store_data(df_repo_pr_merged, df_users_pr_merged):
+    with conn:
+        for _, row in df_repo_pr_merged.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO PR_from_repo (repo_name, merged_pull_requests_count)
+            VALUES (?, ?)
+            ''', (row['repo_name'], row['merged_pull_requests_count']))
+
+        for _, row in df_users_pr_merged.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO PR_from_user (user, merged_pull_requests_count)
+            VALUES (?, ?)
+            ''', (row['user'], row['merged_pull_requests_count']))
+
 df_repo_pr_merged, df_users_pr_merged = get_repositories_with_pagination()
+store_data(df_repo_pr_merged, df_users_pr_merged)
 
-pd.set_option('display.max_rows', None)
+print("Dados armazenados no banco de dados SQLite com sucesso.")
 
-print("Pull request por repositórios:")
-print(df_repo_pr_merged)
+cursor.execute('SELECT * FROM PR_from_repo')
+repos = cursor.fetchall()
 
-print("\nPull request por usuário:")
-print(df_users_pr_merged)
 
-## Acrescentar alterações de linhas de codigo na query
-## Adicionar issues na query (Assigne, Closed)
-## Criar banco de dados SQL
-## Criar visualização
+cursor.execute('SELECT * FROM PR_from_user')
+users = cursor.fetchall()
+
+
+
+conn.close()

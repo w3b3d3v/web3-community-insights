@@ -1,12 +1,10 @@
-# Process issues datas from web3dev repositories
-
 import requests
 import pandas as pd
 from dotenv import load_dotenv
 import os
 import time
+import sqlite3
 
-# Carregar variáveis de ambiente
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -16,6 +14,8 @@ headers = {
     'Authorization': f'bearer {GITHUB_TOKEN}',
     'Content-Type': 'application/json'
 }
+
+db_path = os.getenv('DB_PATH', 'github_insights/process_datas/github_data.db')
 
 def fetch_data(query, retries=3, delay=5):
     """Função para buscar dados da API do GitHub com repetição em caso de erro."""
@@ -27,7 +27,6 @@ def fetch_data(query, retries=3, delay=5):
             print(f"Attempt {attempt + 1} failed with status {response.status_code}. Retrying in {delay} seconds...")
             time.sleep(delay)
     
-    # Se todas as tentativas falharem, levanta um erro
     raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
 def process_data(data):
@@ -138,12 +137,63 @@ def get_repositories_with_pagination():
 
     return df_repo_issues, df_users_issues
 
+def create_tables():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Issues_from_repo (
+        repo_name TEXT PRIMARY KEY,
+        issues_count INTEGER
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Issues_from_user (
+        user TEXT PRIMARY KEY,
+        issues_count INTEGER
+    )
+    ''')
+
+    conn.close()
+
+def store_data(df_repo_issues, df_users_issues):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    with conn:
+        for _, row in df_repo_issues.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Issues_from_repo (repo_name, issues_count)
+            VALUES (?, ?)
+            ''', (row['repo_name'], row['issues_count']))
+
+        for _, row in df_users_issues.iterrows():
+            cursor.execute('''
+            INSERT OR REPLACE INTO Issues_from_user (user, issues_count)
+            VALUES (?, ?)
+            ''', (row['user'], row['issues_count']))
+
+    conn.close()
+
+create_tables()
+
 df_repo_issues, df_users_issues = get_repositories_with_pagination()
+store_data(df_repo_issues, df_users_issues)
 
-pd.set_option('display.max_rows', None)
+print("Dados armazenados no banco de dados SQLite com sucesso.")
 
-print("Issues por repositórios:")
-print(df_repo_issues)
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+cursor.execute('SELECT * FROM Issues_from_repo')
+repos = cursor.fetchall()
 
-print("\nIssues por usuário:")
-print(df_users_issues)
+
+
+cursor.execute('SELECT * FROM Issues_from_user')
+users = cursor.fetchall()
+
+
+
+conn.close()
+
