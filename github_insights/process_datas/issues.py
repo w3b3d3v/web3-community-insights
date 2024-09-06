@@ -30,7 +30,6 @@ def fetch_data(query, retries=3, delay=5):
     raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
 def process_data(data):
-    """Função para processar os dados obtidos da API."""
     if not data or 'data' not in data or not data['data']:
         raise ValueError("Unexpected data structure: {}".format(data))
     
@@ -39,19 +38,10 @@ def process_data(data):
         raise ValueError("Organization data not found in the response: {}".format(data))
     
     repositories = organization_data.get('repositories', {}).get('nodes', [])
-
-    repo_data = []
     user_issue_activity = {}
 
     for repo in repositories:
-        repo_name = repo.get('name', 'Unknown')
-        issues_count = repo.get('issues', {}).get('totalCount', 0)
         issue_nodes = repo.get('issues', {}).get('nodes', [])
-
-        repo_data.append({
-            'repo_name': repo_name,
-            'issues_count': issues_count
-        })
 
         for issue in issue_nodes:
             user = issue.get('author', {}).get('login', 'Unknown')
@@ -60,16 +50,12 @@ def process_data(data):
             else:
                 user_issue_activity[user] = 1
 
-    df_repos = pd.DataFrame(repo_data)
-    df_repo_issues = df_repos.sort_values(by='issues_count', ascending=False)
-    
     df_users = pd.DataFrame(user_issue_activity.items(), columns=['user', 'issues_count'])
     df_users_issues = df_users.sort_values(by='issues_count', ascending=False)
 
-    return df_repo_issues, df_users_issues
+    return df_users_issues
 
 def get_repositories_with_pagination():
-    
     query = """
     {
       organization(login: "w3b3d3v") {
@@ -94,7 +80,6 @@ def get_repositories_with_pagination():
     }
     """
     
-    all_repos = []
     user_issue_activity = {}
     has_next_page = True
     end_cursor = None
@@ -113,14 +98,7 @@ def get_repositories_with_pagination():
         end_cursor = page_info.get('endCursor', None)
 
         for repo in repositories:
-            repo_name = repo.get('name', 'Unknown')
-            issues_count = repo.get('issues', {}).get('totalCount', 0)
             issue_nodes = repo.get('issues', {}).get('nodes', [])
-
-            all_repos.append({
-                'repo_name': repo_name,
-                'issues_count': issues_count
-            })
 
             for issue in issue_nodes:
                 user = issue.get('author', {}).get('login', 'Unknown')
@@ -129,24 +107,14 @@ def get_repositories_with_pagination():
                 else:
                     user_issue_activity[user] = 1
 
-    df_repos = pd.DataFrame(all_repos)
-    df_repo_issues = df_repos.sort_values(by='issues_count', ascending=False)
-    
     df_users = pd.DataFrame(user_issue_activity.items(), columns=['user', 'issues_count'])
     df_users_issues = df_users.sort_values(by='issues_count', ascending=False)
 
-    return df_repo_issues, df_users_issues
+    return df_users_issues
 
 def create_tables():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Issues_from_repo (
-        repo_name TEXT PRIMARY KEY,
-        issues_count INTEGER
-    )
-    ''')
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Issues_from_user (
@@ -157,17 +125,11 @@ def create_tables():
 
     conn.close()
 
-def store_data(df_repo_issues, df_users_issues):
+def store_data(df_users_issues):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     with conn:
-        for _, row in df_repo_issues.iterrows():
-            cursor.execute('''
-            INSERT OR REPLACE INTO Issues_from_repo (repo_name, issues_count)
-            VALUES (?, ?)
-            ''', (row['repo_name'], row['issues_count']))
-
         for _, row in df_users_issues.iterrows():
             cursor.execute('''
             INSERT OR REPLACE INTO Issues_from_user (user, issues_count)
@@ -176,24 +138,22 @@ def store_data(df_repo_issues, df_users_issues):
 
     conn.close()
 
-create_tables()
+def main():
+    df_users_issues = get_repositories_with_pagination()
 
-df_repo_issues, df_users_issues = get_repositories_with_pagination()
-store_data(df_repo_issues, df_users_issues)
+    create_tables()
 
-print("Dados armazenados no banco de dados SQLite com sucesso.")
+    store_data(df_users_issues)
 
-conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
-cursor.execute('SELECT * FROM Issues_from_repo')
-repos = cursor.fetchall()
+    pd.set_option('display.max_rows', None)
 
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
+    cursor.execute('SELECT * FROM Issues_from_user')
+    users = cursor.fetchall()
 
-cursor.execute('SELECT * FROM Issues_from_user')
-users = cursor.fetchall()
+    conn.close()
 
-
-
-conn.close()
-
+if __name__ == "__main__":
+    main()

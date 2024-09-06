@@ -32,7 +32,6 @@ def calculate_time_to_close(created_at, closed_at):
     return (closed_date - created_date).days
 
 def process_data(all_issues):
-    """Processa os dados das issues para calcular o tempo médio de fechamento por usuário."""
     user_activity = {}
     
     for issue in all_issues:
@@ -57,7 +56,6 @@ def process_data(all_issues):
     return df_time_to_close
 
 def get_repositories_with_pagination():
-    """Obtém dados das issues dos repositórios com paginação."""
     query = """
     {
       organization(login: "w3b3d3v") {
@@ -139,7 +137,6 @@ def get_repositories_with_pagination():
     return df_time_to_close
 
 def create_tables():
-    """Cria a tabela no banco de dados se não existir."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 

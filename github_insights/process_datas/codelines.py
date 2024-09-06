@@ -14,7 +14,6 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-# Configuração do caminho do banco de dados SQLite
 db_path = os.getenv('DB_PATH', 'github_insights/process_datas/github_data.db')
 
 def fetch_data(query, variables=None):
@@ -24,14 +23,13 @@ def fetch_data(query, variables=None):
     else:
         raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
-def get_repositories_and_users():
+def get_user_activity():
     query = """
     query($cursor: String) {
       organization(login: "w3b3d3v") {
         repositories(first: 10, after: $cursor) {
           edges {
             node {
-              name
               pullRequests(states: [MERGED], first: 10) {
                 edges {
                   node {
@@ -54,7 +52,6 @@ def get_repositories_and_users():
     }
     """
 
-    all_repo_data = []
     all_user_activity = {}
 
     cursor = None
@@ -70,16 +67,7 @@ def get_repositories_and_users():
         cursor = page_info.get('endCursor')
 
         for edge in repositories:
-            repo = edge.get('node', {})
-            repo_name = repo.get('name', 'Unknown')
-            pr_nodes = repo.get('pullRequests', {}).get('edges', [])
-
-            total_lines_changed = sum(pr.get('node', {}).get('additions', 0) + pr.get('node', {}).get('deletions', 0) for pr in pr_nodes)
-
-            all_repo_data.append({
-                'repo_name': repo_name,
-                'total_lines_changed': total_lines_changed
-            })
+            pr_nodes = edge.get('node', {}).get('pullRequests', {}).get('edges', [])
 
             for pr in pr_nodes:
                 user = pr.get('node', {}).get('author', {}).get('login', 'Unknown')
@@ -89,24 +77,14 @@ def get_repositories_and_users():
                 else:
                     all_user_activity[user] = lines_changed
 
-    df_repos = pd.DataFrame(all_repo_data)
-    df_repo_codelines = df_repos.sort_values(by='total_lines_changed', ascending=False)
-    
     df_users = pd.DataFrame(all_user_activity.items(), columns=['user', 'total_lines_changed'])
     df_user_codelines = df_users.sort_values(by='total_lines_changed', ascending=False)
 
-    return df_repo_codelines, df_user_codelines
+    return df_user_codelines
 
 def create_tables():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS CodeLines_from_repo (
-        repo_name TEXT PRIMARY KEY,
-        total_lines_changed INTEGER
-    )
-    ''')
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS CodeLines_from_user (
@@ -117,16 +95,11 @@ def create_tables():
 
     conn.close()
 
-def store_data(df_repo_codelines, df_user_codelines):
+def store_data(df_user_codelines):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     with conn:
-        for _, row in df_repo_codelines.iterrows():
-            cursor.execute('''
-            INSERT OR REPLACE INTO CodeLines_from_repo (repo_name, total_lines_changed)
-            VALUES (?, ?)
-            ''', (row['repo_name'], row['total_lines_changed']))
 
         for _, row in df_user_codelines.iterrows():
             cursor.execute('''
@@ -137,26 +110,19 @@ def store_data(df_repo_codelines, df_user_codelines):
     conn.close()
 
 def main():
-    df_repo_codelines, df_user_codelines = get_repositories_and_users()
+    df_user_codelines = get_user_activity()
 
     create_tables()
 
-    store_data(df_repo_codelines, df_user_codelines)
+    store_data(df_user_codelines)
 
     pd.set_option('display.max_rows', None)
 
-    # Consultar dados da tabela CodeLines_from_repo
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM CodeLines_from_repo')
-    repos = cursor.fetchall()
-
-
 
     cursor.execute('SELECT * FROM CodeLines_from_user')
     users = cursor.fetchall()
-
-
 
     conn.close()
 

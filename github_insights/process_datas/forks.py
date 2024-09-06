@@ -30,7 +30,6 @@ def fetch_data(query, retries=3, delay=5):
     raise Exception(f"HTTP error occurred: {response.status_code} - {response.text}")
 
 def process_data(data):
-    """Função para processar os dados obtidos da API."""
     if not data or 'data' not in data or not data['data']:
         raise ValueError("Unexpected data structure: {}".format(data))
     
@@ -40,18 +39,10 @@ def process_data(data):
     
     repositories = organization_data.get('repositories', {}).get('nodes', [])
 
-    repo_data = []
     user_fork_activity = {}
 
     for repo in repositories:
-        repo_name = repo.get('name', 'Unknown')
-        forks_count = repo.get('forks', {}).get('totalCount', 0)
         fork_nodes = repo.get('forks', {}).get('nodes', [])
-
-        repo_data.append({
-            'repo_name': repo_name,
-            'forks_count': forks_count
-        })
 
         for fork in fork_nodes:
             user = fork.get('owner', {}).get('login', 'Unknown')
@@ -59,25 +50,19 @@ def process_data(data):
                 user_fork_activity[user] += 1
             else:
                 user_fork_activity[user] = 1
-
-    df_repos = pd.DataFrame(repo_data)
-    df_repo_forks = df_repos.sort_values(by='forks_count', ascending=False)
     
     df_users = pd.DataFrame(user_fork_activity.items(), columns=['user', 'forks_count'])
     df_users_forks = df_users.sort_values(by='forks_count', ascending=False)
 
-    return df_repo_forks, df_users_forks
+    return df_users_forks
 
 def get_repositories_with_pagination():
-    """Função para obter dados de repositórios com paginação e coleta de forks."""
     query = """
     {
       organization(login: "w3b3d3v") {
         repositories(first: 100) { 
           nodes {
-            name
             forks(first: 100) {
-              totalCount
               nodes {
                 owner {
                   login
@@ -94,7 +79,6 @@ def get_repositories_with_pagination():
     }
     """
     
-    all_repos = []
     user_fork_activity = {}
     has_next_page = True
     end_cursor = None
@@ -113,14 +97,7 @@ def get_repositories_with_pagination():
         end_cursor = page_info.get('endCursor', None)
 
         for repo in repositories:
-            repo_name = repo.get('name', 'Unknown')
-            forks_count = repo.get('forks', {}).get('totalCount', 0)
             fork_nodes = repo.get('forks', {}).get('nodes', [])
-
-            all_repos.append({
-                'repo_name': repo_name,
-                'forks_count': forks_count
-            })
 
             for fork in fork_nodes:
                 user = fork.get('owner', {}).get('login', 'Unknown')
@@ -128,25 +105,15 @@ def get_repositories_with_pagination():
                     user_fork_activity[user] += 1
                 else:
                     user_fork_activity[user] = 1
-
-    df_repos = pd.DataFrame(all_repos)
-    df_repo_forks = df_repos.sort_values(by='forks_count', ascending=False)
     
     df_users = pd.DataFrame(user_fork_activity.items(), columns=['user', 'forks_count'])
     df_users_forks = df_users.sort_values(by='forks_count', ascending=False)
 
-    return df_repo_forks, df_users_forks
+    return df_users_forks
 
 def create_tables():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Forks_from_repo (
-        repo_name TEXT PRIMARY KEY,
-        forks_count INTEGER
-    )
-    ''')
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Forks_from_user (
@@ -157,17 +124,11 @@ def create_tables():
 
     conn.close()
 
-def store_data(df_repo_forks, df_users_forks):
+def store_data(df_users_forks):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     with conn:
-        for _, row in df_repo_forks.iterrows():
-            cursor.execute('''
-            INSERT OR REPLACE INTO Forks_from_repo (repo_name, forks_count)
-            VALUES (?, ?)
-            ''', (row['repo_name'], row['forks_count']))
-
         for _, row in df_users_forks.iterrows():
             cursor.execute('''
             INSERT OR REPLACE INTO Forks_from_user (user, forks_count)
@@ -177,25 +138,19 @@ def store_data(df_repo_forks, df_users_forks):
     conn.close()
 
 def main():
-    df_repo_forks, df_users_forks = get_repositories_with_pagination()
+    df_users_forks = get_repositories_with_pagination()
 
     create_tables()
 
-    store_data(df_repo_forks, df_users_forks)
+    store_data(df_users_forks)
 
     pd.set_option('display.max_rows', None)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM Forks_from_repo')
-    repos = cursor.fetchall()
-
-
 
     cursor.execute('SELECT * FROM Forks_from_user')
     users = cursor.fetchall()
-
-
 
     conn.close()
 

@@ -20,13 +20,6 @@ conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS PR_from_repo (
-    repo_name TEXT PRIMARY KEY,
-    merged_pull_requests_count INTEGER
-)
-''')
-
-cursor.execute('''
 CREATE TABLE IF NOT EXISTS PR_from_user (
     user TEXT PRIMARY KEY,
     merged_pull_requests_count INTEGER
@@ -70,13 +63,11 @@ def process_data(data):
             else:
                 user_activity[user] = 1
 
-    df_repos = pd.DataFrame(repo_data)
-    df_repo_pr_merged = df_repos.sort_values(by='merged_pull_requests_count', ascending=False)
     
     df_users = pd.DataFrame(user_activity.items(), columns=['user', 'merged_pull_requests_count'])
     df_users_pr_merged = df_users.sort_values(by='merged_pull_requests_count', ascending=False)
 
-    return df_repo_pr_merged, df_users_pr_merged
+    return df_users_pr_merged
 
 def get_repositories_with_pagination():
     query = """
@@ -141,21 +132,16 @@ def get_repositories_with_pagination():
                 else:
                     user_activity[user] = 1
 
-    df_repos = pd.DataFrame(all_repos)
-    df_repo_pr_merged = df_repos.sort_values(by='merged_pull_requests_count', ascending=False)
+
     
     df_users = pd.DataFrame(user_activity.items(), columns=['user', 'merged_pull_requests_count'])
     df_users_pr_merged = df_users.sort_values(by='merged_pull_requests_count', ascending=False)
 
-    return df_repo_pr_merged, df_users_pr_merged
+    return df_users_pr_merged
 
-def store_data(df_repo_pr_merged, df_users_pr_merged):
+def store_data(df_users_pr_merged):
     with conn:
-        for _, row in df_repo_pr_merged.iterrows():
-            cursor.execute('''
-            INSERT OR REPLACE INTO PR_from_repo (repo_name, merged_pull_requests_count)
-            VALUES (?, ?)
-            ''', (row['repo_name'], row['merged_pull_requests_count']))
+ 
 
         for _, row in df_users_pr_merged.iterrows():
             cursor.execute('''
@@ -163,13 +149,9 @@ def store_data(df_repo_pr_merged, df_users_pr_merged):
             VALUES (?, ?)
             ''', (row['user'], row['merged_pull_requests_count']))
 
-df_repo_pr_merged, df_users_pr_merged = get_repositories_with_pagination()
-store_data(df_repo_pr_merged, df_users_pr_merged)
+df_users_pr_merged = get_repositories_with_pagination()
+store_data(df_users_pr_merged)
 
-print("Dados armazenados no banco de dados SQLite com sucesso.")
-
-cursor.execute('SELECT * FROM PR_from_repo')
-repos = cursor.fetchall()
 
 
 cursor.execute('SELECT * FROM PR_from_user')
